@@ -1,7 +1,7 @@
 # Contributing to ADAM AI
 
 Thank you for your interest in contributing to **ADAM (Autonomous Desktop AI Module)**! 
-ADAM is an open-source project by **DGEN Technologies Pvt. Ltd.** combining AI, embedded systems, and robotics.
+ADAM is an open-source project by **Dgen technologies Pvt. Ltd.** led by **Tirthankar Dasgupta** ([@MrTG1B](https://github.com/MrTG1B)), combining multimodal AI, embedded systems, and robotics.
 
 Whether you are fixing a bug, adding an emotion to the Pico display, extending the Gemini tool definitions, or optimizing sound localization algorithms, your contributions are welcome.
 

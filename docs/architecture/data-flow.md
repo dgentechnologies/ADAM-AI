@@ -1,177 +1,171 @@
-# ADAM Data Flow & Communication Protocols
+# ADAM Data Flow & Communication Protocols (v40)
 
-This document details the end-to-end data lifecycle, packet schemas, and communication protocols across ADAM's subsystems.
+This document details the end-to-end data lifecycle, binary framing specifications, serial command protocols, and digital signal processing pipelines across ADAM's subsystems.
 
 ---
 
-## 1. Bidirectional Voice Pipeline
+## 1. End-to-End Audio & Voice Pipeline
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant User
-    participant Mic as INMP441 Mics (I2S)
-    participant PiDSP as audio_utils.py
-    participant Gem as Gemini Live API
-    participant Amp as MAX98357A Amp (I2S)
+    participant Mic as Dual INMP441 Mics (I2S)
+    participant PipeIn as ALSA arecord Subprocess
+    participant DSP as audio_utils.py (FIR + WOLA + VAD)
+    participant Gem as Gemini Live API (WebSockets)
+    participant PipeOut as ALSA aplay Subprocess
+    participant Amp as MAX98357A I2S Amplifier
     participant Spk as 3W Speaker
 
-    User->>Mic: Speaks ("Hey ADAM, what's the weather?")
-    Mic->>PiDSP: arecord S32_LE (48kHz, Stereo)
-    Note over PiDSP: S32->S16 conversion<br/>Stereo downmix to Mono 16kHz<br/>WebRTC VAD Speech Detection
-    PiDSP->>Gem: WebSocket Audio Chunk (base64 PCM 16kHz)
-    Note over Gem: Multimodal Streaming Inference<br/>Contextual Understanding
-    Gem-->>PiDSP: WebSocket Audio Stream (PCM 24kHz)
-    PiDSP->>Amp: aplay S16_LE (24kHz or 48kHz resampled)
-    Amp->>Spk: Analog Audio Output
+    User->>Mic: "Hey ADAM, what's the weather?"
+    Mic->>PipeIn: I2S Digital Audio (S32_LE, 48kHz, Stereo)
+    PipeIn->>DSP: Raw 32-bit Stereo Bytes
+    Note over DSP: 1. Bit-shift: S32 >> 16 -> S16<br/>2. Channel Select: Left/Right/Mix via Liveness Tracker<br/>3. 80-Tap FIR Bandpass (150Hz - 6.8kHz)<br/>4. Decimation: 3:1 -> 16kHz Mono<br/>5. WOLA Noise Suppressor<br/>6. Adaptive VAD Quorum (3 of 6 chunks)
+    DSP->>Gem: Realtime Audio Stream (PCM 16kHz Mono, base64)
+    Note over Gem: Multimodal Streaming Inference<br/>Natural Language Understanding
+    Gem-->>DSP: Downstream Audio Stream (PCM 24kHz Mono)
+    Note over DSP: Resample 24kHz -> 48kHz S16_LE Stereo
+    DSP->>PipeOut: Write PCM frames to stdin pipe
+    PipeOut->>Amp: I2S Digital Audio (S16_LE, 48kHz, Stereo)
+    Amp->>Spk: Analog Audio Drive
     Spk->>User: ADAM Speaks Response
 
-    opt User Interrupts (Barge-In)
-        User->>Mic: "Wait, never mind!"
-        Mic->>PiDSP: New Speech Detected by VAD
-        PiDSP->>Amp: Kill aplay process (Flush buffer)
-        PiDSP->>Gem: Send Interruption Signal
-        Note over PiDSP,Amp: Instant Silence (< 50ms)
+    opt User Barge-In / Interruption
+        User->>Mic: Speaks during playback ("Wait!")
+        DSP->>DSP: Voice activity detected during playback
+        DSP->>PipeOut: Kill aplay process (Flush ALSA buffers)
+        DSP->>Gem: Send Interruption Signal
+        Note over PipeOut,Amp: Immediate silence (<50ms)
     end
 ```
 
-### Audio Format Standards
-- **Capture Format (Hardware ALSA)**: `S32_LE`, 48,000 Hz, 2 Channels (Stereo).
-- **Processing DSP**: Converted via NumPy slicing and bit-shifting:
+---
+
+## 2. Audio Processing & DSP Specifications
+
+### Input Audio Conversion
+- **ALSA Hardware Capture**: `arecord -D plughw:sndrpigooglevoi,0 -f S32_LE -r 48000 -c 2`
+- **S32_LE to S16_LE Conversion**:
   ```python
-  # S32_LE to S16_LE conversion:
-  samples_32 = np.frombuffer(raw_data, dtype=np.int32)
-  # Take channel 0 (or average) and shift down 16 bits
-  samples_16 = (samples_32[0::2] >> 16).astype(np.int16)
+  samples_32 = np.frombuffer(raw_chunk, dtype=np.int32)
+  # Hardware alignment: INMP441 places 24-bit data in the upper bits of a 32-bit slot
+  samples_16 = (samples_32 >> 16).astype(np.int16)
   ```
-- **Gemini Ingest**: Raw 16-bit linear PCM, 16,000 Hz, Single Channel (Mono).
-- **Gemini Egress**: Raw 16-bit linear PCM, 24,000 Hz, Mono. Resampled on-the-fly to 48,000 Hz for the Google voiceHAT ALSA playback pipe.
+
+### Dynamic Channel Selection (`_MicChannelLiveness`)
+- Analyzes the first-difference RMS ($d = \Delta x$) over a 90-second sliding window.
+- Computes dynamic range per channel: $DR = 20 \cdot \log_{10}(p99 / p20)$.
+- If one channel has a hardware fault ($DR < 3.0\text{ dB}$ while the other channel has $DR > 8.0\text{ dB}$), ADAM automatically drops the dead channel from the speech path. This prevents white noise averaging from destroying consonant intelligibility.
+
+### Anti-Aliasing & Decimation
+- Speech is filtered using an **80-tap windowed-sinc FIR filter** with transition band edges at 150 Hz and 6800 Hz.
+- Decimated by a factor of 3 ($48000\text{ Hz} \rightarrow 16000\text{ Hz}$). The stopband attenuation exceeds 60 dB at the 8000 Hz Nyquist boundary, preventing high-frequency aliasing from corrupting sibilants and fricatives.
+
+### Adaptive VAD & Floor Estimation
+- **Learned Noise Floor**: Tracked as the 20th percentile ($p20$) of a 45-second window.
+- **Asymmetric Floor Adjustment**:
+  - `MIC_FLOOR_RISE = 0.02` (~8s to adapt upward to rising room noise).
+  - `MIC_FLOOR_FALL = 0.25` (~0.7s to adapt downward to quiet rooms).
+- **Onset Quorum**: Requires at least **3 passing chunks out of the last 6 chunks** (100 ms of voiced energy inside a 200 ms window). This allows unvoiced consonants and stop closures to pass without resetting the onset detector.
+- **Turn-Taking Hangover**: `MIC_VAD_HANGOVER_S = 1.0` seconds ensures mid-sentence clause pauses do not prematurely trigger Gemini's turn completion.
 
 ---
 
-## 2. Vision Pipeline & Duty-Cycling
+## 3. High-Speed Serial Framing Protocol (`/dev/serial0`)
 
-To prevent sensor overheating and unnecessary power draw, the camera pipeline is on-demand:
+The link between the Raspberry Pi and the ESP32-CAM operates over the PL011 hardware UART at **921,600 baud, 8 data bits, no parity, 1 stop bit (8N1)**.
+
+### A. Camera Frame Binary Packet (ESP32-CAM -> Pi)
+```text
+Byte Offset | Field            | Data Type     | Value / Description
+------------+------------------+---------------+------------------------------------
+0x00        | Magic Identifier | uint8 (char)  | ASCII 'F' (0x46)
+0x01..0x04  | Payload Length   | uint32 (BE)   | 4-byte big-endian JPEG size (L)
+0x05..0x04+L| Image Data       | bytes         | Raw binary JPEG compressed stream
+0x05+L      | Frame Delimiter  | uint8 (char)  | ASCII '\n' (0x0A)
+```
+
+### B. Touch Event Packets (ESP32-CAM -> Pi)
+Dispatched whenever a debounced capacitive touch state changes:
+```text
+"T<pad_id>:<state>\n"
+
+Examples:
+  "T1:1\n"    -> Touch Pad 1 (Left Cheek) PRESSED
+  "T1:0\n"    -> Touch Pad 1 (Left Cheek) RELEASED
+  "T2:1\n"    -> Touch Pad 2 (Right Cheek) PRESSED
+  "T3:1\n"    -> Touch Pad 3 (Head / Forehead) PRESSED
+  "T4:1\n"    -> Touch Pad 4 (Petting Pad) PRESSED
+```
+
+### C. Gesture Event Packets (ESP32-CAM -> Pi)
+```text
+"G:<gesture_type>\n"
+
+Examples:
+  "G:PET\n"   -> Petting sequence across consecutive head pads
+  "G:TAP\n"   -> Rapid double-tap event
+```
+
+### D. Host Control Commands (Pi -> ESP32-CAM)
+```text
+Command String     | Function
+-------------------+-------------------------------------------------------------
+"CAM:ON\n"         | Power up OV2640 sensor clock & start JPEG transmission
+"CAM:OFF\n"        | De-initialize OV2640 sensor to eliminate thermal dissipation
+"TILT:<angle>\n"   | Set tilt servo angle in degrees (e.g. "TILT:85\n")
+"EMO:<emotion>\n"  | Send emotion state to relay to Pico (e.g. "EMO:happy\n")
+```
+
+---
+
+## 4. Pico Emotion Relay Protocol (ESP32-CAM -> Pico)
+
+The ESP32-CAM relays emotion updates to the Raspberry Pi Pico over `UART1` (`GPIO 3` TX -> `GP1` RX @ 115,200 baud):
 
 ```mermaid
 sequenceDiagram
-    autonumber
     participant Pi as Raspberry Pi Zero 2 W
-    participant ESP as ESP32-CAM (OV2640)
-    participant Gem as Gemini Live
-
-    Note over Pi: User: "What am I holding?"
-    Pi->>ESP: UART2: "CAM:ON\n"
-    Note over ESP: esp_camera_init()<br/>Power up sensor clock
-    ESP-->>Pi: UART2: "ACK:CAM_READY\n"
-
-    loop Frame Capture (1-5 FPS)
-        ESP->>ESP: esp_camera_fb_get() -> JPEG Buffer
-        ESP->>Pi: Binary Packet: 'F' + [4B Length] + [JPEG Bytes]
-        Pi->>Pi: Validate Header & Read Full Buffer
-        Pi->>Gem: Send Realtime Image Frame (base64)
-    end
-
-    Note over Gem: Analyzes visual input & answers
-    Pi->>ESP: UART2: "CAM:OFF\n"
-    Note over ESP: esp_camera_deinit()<br/>Power down sensor clock to 0 mA
-```
-
-### Binary UART Framing Specification
-The Pi-to-ESP32 serial link operates over a custom binary protocol on `/dev/serial0` (921,600 baud, 8N1):
-
-#### Camera Frame Packet (ESP32 -> Pi)
-```text
-Offset | Field           | Type          | Description
--------+-----------------+---------------+-----------------------------------------
-0x00   | Header Magic    | uint8 (char)  | ASCII 'F' (0x46)
-0x01   | Payload Length  | uint32 (BE)   | 4-byte big-endian length of JPEG data
-0x05   | Image Payload   | bytes         | Raw compressed JPEG file stream
-0x05+L | Checksum / End  | uint8 (char)  | ASCII '\n' delimiter
-```
-
-#### Touch Event Packet (ESP32 -> Pi)
-```text
-ASCII Line: "T<pad_number>:<state>\n"
-Example:    "T1:1\n"  (Touch Pad 1 Pressed)
-            "T1:0\n"  (Touch Pad 1 Released)
-```
-
-#### Gesture Event Packet (ESP32 -> Pi)
-```text
-ASCII Line: "G:<gesture_name>\n"
-Example:    "G:PET\n"   (Petting gesture across top sensors)
-            "G:TAP\n"   (Quick double tap)
-```
-
-#### Actuation & Control Commands (Pi -> ESP32)
-```text
-"TILT:<degrees>\n"      # Set tilt servo angle (45 - 135 deg)
-"CAM:ON\n"              # Power up camera sensor
-"CAM:OFF\n"             # Power down camera sensor
-"EMO:<emotion_name>\n"  # Inbound emotion state to relay to Pico
-```
-
----
-
-## 3. Direction-of-Arrival (DOA) Sound Localization
-
-ADAM uses dual omnidirectional INMP441 MEMS microphones separated by a known baseline distance ($d = 65\text{ mm}$) to calculate sound origin angle $\theta$ and orient its physical head:
-
-```mermaid
-graph LR
-    MicL[Left Mic INMP441] --> S32L[Stereo S32 Stream]
-    MicR[Right Mic INMP441] --> S32R[Stereo S32 Stream]
-    S32L & S32R --> FFT[Cross-Spectral Density FFT]
-    FFT --> PHAT[Phase Transform Normalization]
-    PHAT --> IFFT[Inverse FFT: GCC-PHAT Cross-Correlation]
-    IFFT --> Peak[Peak Detection -> Time Delay Tau]
-    Peak --> Angle[Theta = arcsin(c * Tau / d)]
-    Angle --> Servo[gpiozero AngularServo: Pan Angle]
-```
-
-### Mathematical Formulation
-1. **Cross-Correlation**:
-   $$\text{GCC-PHAT}(t) = \mathcal{F}^{-1}\left( \frac{X_1(f) X_2^*(f)}{|X_1(f) X_2^*(f)|} \right)$$
-2. **Time Delay ($\tau$)**:
-   $$\tau = \arg\max_t (\text{GCC-PHAT}(t))$$
-3. **Angle Calculation**:
-   $$\theta = \arcsin\left( \frac{c \cdot \tau}{d} \right)$$
-   Where $c = 343\text{ m/s}$ (speed of sound) and $d = 0.065\text{ m}$.
-
----
-
-## 4. Emotional Expression & Display Pipeline
-
-The emotion pipeline links Gemini's conversational intent to the physical facial rendering on the Raspberry Pi Pico:
-
-```mermaid
-sequenceDiagram
-    participant Gem as Gemini API
-    participant Pi as Pi Zero 2 W
     participant ESP as ESP32-CAM
-    participant Pico as RP2040 Pico
+    participant Pico as RP2040 Pico (Display)
 
-    Note over Gem: AI decides tone is joyful
-    Gem->>Pi: Function Call: express_emotion(emotion="happy")
+    Note over Pi: Gemini calls express_emotion(emotion="happy")
     Pi->>ESP: UART2: "EMO:happy\n"
-    Note over ESP: relayEmotionToPico()<br/>Strips "EMO:" prefix
+    Note over ESP: relayEmotionToPico()<br/>1. Intercepts "EMO:" prefix<br/>2. Strips prefix to bare token "happy\n"<br/>3. Transmits over UART1 (GPIO 3)
     ESP->>Pico: UART1: "happy\n"
-    Note over Pico: State Machine switches to 'happy'<br/>Eyelids arch, mouth widens, cheeks blush<br/>Renders 60 FPS vector shapes
+    Note over Pico: State machine receives "happy"<br/>Double-buffered vector engine draws<br/>smiling eyes and pink blush cheeks
 ```
 
-### Supported Emotion Tokens
-- `idle`: Default calm state with lifelike subtle eye drifts and periodic blinks.
-- `speaking`: Synchronized mouth pulses and vibrant animated eyes.
-- `happy`: Arched upper eyelids, wide curved smile, and pink blush cheeks.
-- `sad`: Drooping eyelids, downward curved mouth, deep blue hue.
-- `angry`: Sharp angled inner brows, compressed mouth, fiery red tint.
-- `panic`: Rapid horizontal saccadic eye darts with oscillating pupil sizes.
-- `surprised`: Wide circular pupils, dropped oval mouth.
-- `shy`: Downcast eyes looking away with soft pink cheek highlights.
-- `sleep`: Closed eyelids (horizontal slits) with slow breathing animation.
-- `thinking`: Eyes tilted upward toward corner with pulsing eyebrow indicator.
-- `reconnecting`: Amber pulsing ring indicating network handshake in progress.
-- `love`: Heart-shaped pupil vector transitions.
-- `confused`: Asymmetrical eyebrows with tilted pupils.
-- `rizz`: Winking left eyelid with confident grin.
+### Supported Emotion Tokens:
+`idle`, `speaking`, `happy`, `sad`, `angry`, `panic`, `surprised`, `shy`, `sleep`, `thinking`, `reconnecting`, `love`, `confused`, `rizz`.
+
+---
+
+## 5. Direction-of-Arrival (DOA) Tracking Pipeline
+
+When both microphones are healthy, ADAM localizes voice azimuth using GCC-PHAT:
+
+```text
+Mic 1 (Left)  ──▶ [48kHz S16] ──┐
+                                 ├──▶ [Cross-Spectral Density FFT] ──▶ [PHAT Normalization]
+Mic 2 (Right) ──▶ [48kHz S16] ──┘                                            │
+                                                                             ▼
+                                                                [Inverse FFT (GCC-PHAT)]
+                                                                             │
+                                                                             ▼
+                                                                [Peak Lag -> Delay Tau]
+                                                                             │
+                                                                             ▼
+                                                   [Azimuth Theta = arcsin(c * Tau / d)]
+                                                                             │
+                                                                             ▼
+                                                            [gpiozero Pan Servo Update]
+```
+
+### Mechanical Settle Guard:
+To ensure servo movement noise does not corrupt speech recognition:
+1. Target angle is clamped to a 12° deadzone (`NECK_PAN_DEADZONE_DEG=12`).
+2. Minimum move interval is enforced (`NECK_PAN_COOLDOWN_S=1.5`).
+3. Servo PWM is driven for `NECK_SERVO_HOLD_S=0.6s`, then released (`detach()`).
+4. Gate opening is temporarily held during the 2.0s settling window (`NECK_SERVO_SETTLE_S=2.0s`).

@@ -10,11 +10,13 @@
 [![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Google Gemini](https://img.shields.io/badge/Gemini-Live%20Multimodal%20API-4285F4.svg?logo=google&logoColor=white)](https://ai.google.dev/)
 [![Hardware](https://img.shields.io/badge/Hardware-Pi%20Zero%202W%20%7C%20ESP32--CAM%20%7C%20RP2040-red.svg)](#hardware-architecture)
-[![Made in India](https://img.shields.io/badge/Made%20in%20India-%F0%9F%87%AE%F0%9F%87%B3%20DGEN%20Technologies-orange.svg)](https://dgentechnologies.com)
+[![Made by](https://img.shields.io/badge/Made%20by-Dgen%20technologies-orange.svg)](https://dgentechnologies.com)
+[![Lead Contributor](https://img.shields.io/badge/Lead%20Contributor-Tirthankar%20Dasgupta-100000.svg?logo=github&logoColor=white)](https://github.com/MrTG1B)
 
-[**Explore Docs**](docs/architecture/system-architecture.md) &nbsp;•&nbsp;
-[**Hardware Setup**](docs/hardware/pinout.md) &nbsp;•&nbsp;
-[**Software Stack**](software/pi/README.md) &nbsp;•&nbsp;
+[**System Architecture**](docs/architecture/system-architecture.md) &nbsp;•&nbsp;
+[**Master Pinout**](docs/hardware/pinout.md) &nbsp;•&nbsp;
+[**Hardware Setup**](docs/hardware/raspberry-pi.md) &nbsp;•&nbsp;
+[**Host Software**](software/pi/README.md) &nbsp;•&nbsp;
 [**Companion Apps**](apps/README.md) &nbsp;•&nbsp;
 [**Contributing**](CONTRIBUTING.md)
 
@@ -22,26 +24,42 @@
 
 ---
 
-## 🌟 Overview
+## 🌟 Executive Overview
 
-**ADAM (Autonomous Desktop AI Module)** is a next-generation, open-source embodied AI companion engineered by **[DGEN Technologies Pvt. Ltd.](https://dgentechnologies.com)** 
+**ADAM (Autonomous Desktop AI Module)** is a cutting-edge embodied AI companion robot engineered and developed by **[Dgen technologies](https://dgentechnologies.com)**, led by creator and contributor **[Tirthankar Dasgupta](https://github.com/MrTG1B)**.
 
-Unlike traditional smart speakers or screen-bound voice assistants, ADAM combines **cloud-scale multimodal intelligence** with **physical robotic embodiment**. Powered by the **Google Gemini Live API**, ADAM engages in natural, full-duplex conversational voice interactions with ultra-low latency, perceives visual context through an onboard vision sensor, tracks human presence mechanically using dual-microphone sound localization, and conveys rich emotional nuance through fluid vector-rendered digital eyes.
+Unlike traditional smart speakers or screen-bound voice assistants, ADAM unifies **cloud-scale multimodal intelligence** with **physical robotic embodiment**. Powered by the **Google Gemini Live API**, ADAM engages in natural, full-duplex conversational voice interactions with sub-second latency, perceives real-world visual context through an onboard vision sensor, tracks human presence mechanically using dual-microphone acoustic sound localization, and conveys rich emotional nuance through fluid vector-rendered digital eyes.
 
-Whether acting as an autonomous desktop companion, an intelligent workstation orchestrator, or an extensible robotics research platform, ADAM bridges the physical and digital worlds seamlessly.
+Designed as an autonomous desktop companion, an intelligent workstation orchestrator, and an extensible robotics research platform, ADAM bridges the physical and digital worlds seamlessly.
 
 ---
 
-## ✨ Key Highlights & Capabilities
+## 👨‍💻 Creator & Engineering Leadership
 
-| Capability | Technical Realization |
+ADAM is designed, engineered, and maintained by **Dgen technologies** with primary architecture and development by:
+
+- **Lead Creator & Contributor**: **Tirthankar Dasgupta**  
+  GitHub: [@MrTG1B](https://github.com/MrTG1B)  
+  *Robotics Architecture, Multimodal Streaming Pipelines, Embedded Hardware & Signal Processing.*
+
+- **Organization**: **Dgen technologies Pvt. Ltd.** (Kolkata, India)  
+  Website: [dgentechnologies.com](https://dgentechnologies.com)  
+  Mission: *"Innovate. Integrate. Inspire." | Made with pride in India.*
+
+---
+
+## ✨ Key Technical Innovations (v40)
+
+| Capability | Engineering Realization |
 | :--- | :--- |
 | **Bidirectional Live Voice** | Full-duplex audio streaming over persistent WebSockets to **Gemini Multimodal Live**, featuring sub-second response times and immediate barge-in / interruption handling. |
-| **Acoustic Localization (DOA)** | Dual I2S **INMP441** MEMS microphones running real-time **GCC-PHAT** cross-correlation algorithms to pinpoint speaker direction and turn toward voice sources. |
-| **Expressive Animated Eyes** | Dedicated **Raspberry Pi Pico (RP2040)** rendering 60 FPS vector eye and mouth animations across 14 emotional states on a 2.4" **ST7789** IPS display. |
+| **I2S Subprocess Audio Pipeline** | Driven via ALSA `arecord` (`S32_LE`, 48kHz stereo) and `aplay` (`S16_LE`, 48kHz stereo) pipes. Survives I2S driver wedges without crashing the Python interpreter. |
+| **Dynamic Channel Liveness** | Continuous acoustic dynamic range tracking (`_MicChannelLiveness`). Automatically isolates and drops defective channels (e.g. Vero board right mic hiss) to recover **11.7–21 dB of consonant SNR**. |
+| **Adaptive Quorum VAD** | Room-learned spectral flatness gate with **3-of-6 chunk onset quorum** (100 ms voiced speech within 200 ms) and asymmetric floor tracking (`rise=0.02`, `fall=0.25`). |
+| **Expressive Vector Eyes** | Dedicated **Raspberry Pi Pico (RP2040)** rendering 60 FPS vector eye and mouth animations across 14 emotional states on a 2.4" **ST7789** IPS display. |
 | **Vision & Duty-Cycled Optics** | Hardware-accelerated **ESP32-CAM (OV2640)** streaming compressed JPEG frames over high-speed UART (921,600 baud) with intelligent thermal duty-cycling. |
-| **Capacitive Touch Matrix** | Four **TTP223** touch sensors (cheeks, head, chin) configured in momentary mode for petting, waking, and physical tap feedback. |
-| **Pan-Tilt Mechanical Actuation** | Closed-loop servo actuation (Pan via Pi GPIO PWM, Tilt via ESP32) for expressive lifelike head gestures. |
+| **Acoustic Servo Decoupling** | Closed-loop pan actuation on GPIO 12 with an automatic 0.6s detach state machine that prevents motor PWM hum from leaking into the microphones. |
+| **Capacitive Touch Matrix** | Four **TTP223** touch sensors (cheeks, head, chin) configured in momentary mode with 3-sample majority voting and 60ms debounce. |
 | **Local Companion Agent** | Distributed LAN-based **Laptop Agent** exposing system controls (volume, brightness, application launching, Spotify) via self-describing REST and mDNS. |
 | **Persistent Contextual Memory** | Local JSON & vector-backed long-term memory store allowing ADAM to recall personal user preferences, past conversations, and facts. |
 
@@ -49,7 +67,7 @@ Whether acting as an autonomous desktop companion, an intelligent workstation or
 
 ## 🏛️ System Architecture
 
-ADAM utilizes a **distributed micro-tier architecture** that offloads heavy computation to specialized processing units, ensuring real-time responsiveness without thermal throttling:
+ADAM utilizes a **distributed micro-tier architecture** that offloads hard real-time tasks to specialized microcontrollers, ensuring responsive execution without thermal throttling:
 
 ```
                                   ┌───────────────────────────┐
@@ -61,7 +79,7 @@ ADAM utilizes a **distributed micro-tier architecture** that offloads heavy comp
 ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
 │  TIER 1: RASPBERRY PI ZERO 2 W (Orchestration & Voice Brain)                                  │
 │                                                                                                │
-│   INMP441 Dual Mics ──▶ [arecord (S32_LE)] ──▶ [GCC-PHAT DSP] ──▶ Pan Servo (GPIO12)          │
+│   INMP441 Dual Mics ──▶ [arecord (S32_LE)] ──▶ [WOLA / FIR / Quorum VAD] ──▶ Pan Servo (GPIO12)│
 │   Gemini Voice Out   ──▶ [aplay (S16_LE)]   ──▶ MAX98357A I2S Amp ──▶ 3W Speaker               │
 │   Vosk Offline Engine (Wake-word) & Persistent Memory Store                                    │
 └───────────────────────────────────────────────┬────────────────────────────────────────────────┘
@@ -95,41 +113,41 @@ For complete technical specifications, see:
 
 ```text
 ADAM AI/
-├── README.md                            # Primary project landing page
+├── README.md                            # Primary project landing page (this file)
 ├── LICENSE                              # Apache 2.0 open-source license
 ├── CONTRIBUTING.md                      # Contribution and coding guidelines
 ├── .gitignore                           # Git ignore rules for Python, C++, and builds
-├── .env.example                         # Safe template for credentials & config
+├── .env.example                         # Production-verified configuration template
 │
-├── docs/                                # In-depth technical documentation
+├── docs/                                # Technical documentation
 │   ├── architecture/
 │   │   ├── system-architecture.md       # Multi-tier computing model & topology
-│   │   ├── data-flow.md                 # End-to-end data lifecycle & protocols
-│   │   └── hardware-architecture.md     # Power rails, buck regulators & thermals
+│   │   ├── data-flow.md                 # End-to-end data lifecycle & binary packet protocols
+│   │   └── hardware-architecture.md     # Power distribution, measured draws & fault remedies
 │   ├── hardware/
-│   │   ├── raspberry-pi.md              # Pi Zero 2 W bring-up, OS & I2S config
+│   │   ├── raspberry-pi.md              # Debian 13 bring-up, voiceHAT I2S & PL011 UART
 │   │   ├── esp32-cam.md                 # ESP32-CAM firmware, camera duty-cycling & touch
 │   │   ├── pico-display.md              # RP2040 MicroPython ST7789 vector engine
-│   │   └── pinout.md                    # Master unified wiring & pinout matrix
+│   │   └── pinout.md                    # Consolidated master pinout cross-reference
 │   └── development/
-│       └── development-guide.md         # Environment setup, simulation & debugging
+│       └── development-guide.md         # Diagnostic scripts, log reading & triage reference
 │
 ├── software/                            # Production source code
 │   ├── pi/                              # Raspberry Pi main orchestrator daemon
-│   │   ├── README.md
-│   │   ├── requirements.txt
-│   │   ├── adam.service
-│   │   └── src/
+│   │   ├── README.md                    # Setup and daemon architecture
+│   │   ├── requirements.txt             # Pip dependency manifest
+│   │   ├── adam.service                 # Production systemd daemon unit with DNS gate
+│   │   └── src/                         # Core Python modules & audio diagnostic tools
 │   ├── esp32-cam/                       # ESP32-CAM Arduino C++ firmware
-│   │   ├── README.md
-│   │   └── src/
+│   │   ├── README.md                    # Arduino IDE & board configuration
+│   │   └── src/esp32_cam.ino            # Dual-UART firmware with touch filter
 │   ├── pico/                            # Raspberry Pi Pico MicroPython face engine
-│   │   ├── README.md
-│   │   └── src/
+│   │   ├── README.md                    # MicroPython runtime guide
+│   │   └── src/main.py                  # 60 FPS vector face renderer (14 emotions)
 │   └── laptop-agent/                    # Python companion host agent
-│       ├── README.md
-│       ├── requirements.txt
-│       └── src/
+│       ├── README.md                    # Modular action registry & LAN mDNS guide
+│       ├── requirements.txt             # Companion agent dependencies
+│       └── src/laptop_agent.py          # Extensible REST action server
 │
 ├── apps/                                # Companion user applications
 │   ├── README.md                        # Application suite documentation
@@ -141,7 +159,7 @@ ADAM AI/
 │   └── videos/                          # 3D animation renders and video demos
 │
 └── examples/                            # Testing utilities & developer recipes
-    ├── README.md
+    ├── README.md                        # Examples overview and running instructions
     ├── mock_esp32_serial.py             # Hardware-free serial link simulator
     ├── custom_action_plugin.py          # Laptop Agent extension recipe
     └── test_audio_doa.py                # Standalone sound localization verification
@@ -161,82 +179,33 @@ ADAM AI/
 | **Audio Output** | MAX98357A I2S Class-D DAC + 3W Speaker | High-clarity speech playback | 5V / 3.3V logic, I2S bus |
 | **Actuators** | 2x SG90 / MG90S Micro Servos | Pan (yaw) and Tilt (pitch) head movement | 5V, 50Hz PWM |
 | **Touch Sensors** | 4x TTP223 Capacitive Modules | Cheeks, forehead, chin physical inputs | 3.3V, Digital GPIO |
-| **Power Distribution** | 5V 4A DC Step-Down / Buck Converter | Clean regulated power delivery | 7V-24V in -> 5.0V out |
+| **Power Distribution** | 5V 5A Synchronous Buck Converter | Regulated star power delivery | 7V-24V in -> 5.0V out |
 
-For complete schematics and connection tables, refer to [**Master Pinout Reference**](docs/hardware/pinout.md).
-
----
-
-## 🚀 Quick Start Guide
-
-### 1. Flash Microcontroller Firmware
-
-#### A. Raspberry Pi Pico (RP2040 Face Renderer)
-1. Install [MicroPython](https://micropython.org/download/rp2-pico/) on your Pico.
-2. Open Thonny or your preferred IDE and upload `software/pico/src/main.py` directly to the Pico as `main.py`.
-3. Power cycle the Pico. You will see ADAM's digital eyes initialize and begin the default breathing/blinking cycle.
-
-#### B. ESP32-CAM (Vision & Touch Node)
-1. Open `software/esp32-cam/src/esp32_cam.ino` in the Arduino IDE.
-2. Select Board: **AI Thinker ESP32-CAM**. Enable **PSRAM**.
-3. Install the required `ESP32Servo` library.
-4. Connect via an FTDI programmer and flash the sketch.
-
-### 2. Configure the Raspberry Pi Zero 2 W
-
-1. Install **Raspberry Pi OS (64-bit Lite, Debian 13 Trixie)** using Raspberry Pi Imager.
-2. Enable SSH and connect to the Pi:
-   ```bash
-   ssh pi@adam-pi.local
-   ```
-3. Enable I2S and PL011 UART in `/boot/firmware/config.txt`:
-   ```ini
-   dtparam=i2s=on
-   dtoverlay=googlevoicehat-soundcard
-   enable_uart=1
-   dtoverlay=disable-bt
-   ```
-4. Clone this repository onto the Pi:
-   ```bash
-   git clone https://github.com/dgentechnologies/ADAM-AI.git /home/pi/ADAM
-   cd /home/pi/ADAM/software/pi
-   ```
-5. Install system and Python dependencies:
-   ```bash
-   sudo apt update && sudo apt install -y python3-venv portaudio19-dev libasound2-dev
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   ```
-6. Set your Google Gemini API key:
-   ```bash
-   cp ../../.env.example .env
-   nano .env
-   ```
-7. Launch ADAM:
-   ```bash
-   python src/main.py
-   ```
-
-### 3. Production Deployment (systemd)
-
-To make ADAM run automatically on system boot as a resilient background service:
-```bash
-sudo cp adam.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable adam.service
-sudo systemctl start adam.service
-sudo journalctl -u adam.service -f
-```
+For complete connection schematics and wiring matrices, refer to [**Master Pinout Reference**](docs/hardware/pinout.md).
 
 ---
 
-## 💻 Companion Software & Apps
+## 📖 Technical Documentation & Bring-Up Guides
 
-ADAM is fully equipped with companion client applications:
-- **PC Dashboard (Vite / React / Tailwind)**: Desktop control interface to monitor ADAM's telemetry, conversation transcripts, and hardware status.
-- **Mobile App (Expo / React Native)**: Mobile device companion for configuring Wi-Fi credentials, selecting voice models, and remote interaction.
-- **Laptop Agent**: Python background service running on your workstation that allows ADAM to mute Spotify, adjust screen brightness, lock the workstation, or launch applications upon voice command.
+Detailed step-by-step technical guides are organized in the [`docs/`](docs/) directory:
+
+- **[System Architecture](docs/architecture/system-architecture.md)**: Multi-tier computing model, ALSA subprocess pipe design, and fault recovery.
+- **[Data Flow & Protocols](docs/architecture/data-flow.md)**: Full-duplex audio stream, binary UART framing, and emotion relay sequence.
+- **[Hardware Architecture](docs/architecture/hardware-architecture.md)**: Power rails, measured electrical current draws, decoupling, and hardware fault remedies.
+- **[Raspberry Pi Bring-Up](docs/hardware/raspberry-pi.md)**: Operating system provisioning (Debian 13 Trixie), device tree overlays, and systemd service setup.
+- **[ESP32-CAM Guide](docs/hardware/esp32-cam.md)**: Arduino C++ firmware flashing, dual-UART configuration, and touch debouncing.
+- **[Pico Display Guide](docs/hardware/pico-display.md)**: MicroPython runtime setup, SPI display driver, and vector emotion engine.
+- **[Master Pinout Reference](docs/hardware/pinout.md)**: Complete cross-hardware pin connections table.
+- **[Development & Diagnostics](docs/development/development-guide.md)**: Audio diagnostic suite (`mic_probe.py`, `mic_modes.py`, etc.), log analysis, and troubleshooting.
+
+---
+
+## 💻 Companion Software & Applications
+
+ADAM is supported by a comprehensive application ecosystem:
+- **PC Dashboard ([`apps/pc`](apps/pc))**: React 18 + Vite + Tailwind desktop control interface for monitoring live telemetry, conversation transcripts, and hardware actuation.
+- **Mobile App ([`apps/mobile`](apps/mobile))**: Turborepo monorepo with Expo / React Native for BLE Wi-Fi onboarding, persona selection, and remote teleoperation.
+- **Laptop Agent ([`software/laptop-agent`](software/laptop-agent))**: Workstation background service exposing audio volume, display brightness, screen lock, and media playback to Gemini function calling.
 
 Learn more in [**Companion Apps Guide**](apps/README.md).
 
@@ -244,25 +213,26 @@ Learn more in [**Companion Apps Guide**](apps/README.md).
 
 ## 🤝 Contributing
 
-We warmly welcome contributions from the open-source community, robotics enthusiasts, and AI researchers! Please review our [**Contributing Guide**](CONTRIBUTING.md) to get started.
+We welcome contributions from robotics engineers, AI researchers, and developers. Please review our [**Contributing Guide**](CONTRIBUTING.md) to get started with coding conventions and hardware testing protocols.
 
 ---
 
 ## ⚖️ License
 
 ADAM AI is released under the **[Apache 2.0 License](LICENSE)**.  
-Copyright &copy; 2026 **DGEN Technologies Pvt. Ltd.**
+Copyright &copy; 2026 **Dgen technologies Pvt. Ltd.**
 
 Commercial licensing, custom hardware integrations, and OEM deployments are available. For enterprise inquiries, contact **contact@dgentechnologies.com**.
 
 ---
 
-## 🏢 Built by DGEN Technologies
+## 🏢 Built by Dgen technologies
 
-**DGEN Technologies Pvt. Ltd.** — Kolkata, India  
+**Dgen technologies Pvt. Ltd.** — Kolkata, India  
 *"Innovate. Integrate. Inspire." | Made with pride in India.*
 
 - **Official Website**: [dgentechnologies.com](https://dgentechnologies.com)
+- **Lead Creator / Contributor**: [Tirthankar Dasgupta (@MrTG1B)](https://github.com/MrTG1B)
 - **Twitter / X**: [@dgen_tec](https://twitter.com/dgen_tec)
 - **Instagram**: [@dgen_technologies](https://instagram.com/dgen_technologies)
-- **LinkedIn**: [DGEN Technologies](https://linkedin.com/company/dgentechnologies)
+- **LinkedIn**: [Dgen technologies](https://linkedin.com/company/dgentechnologies)
