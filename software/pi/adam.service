@@ -1,0 +1,21 @@
+[Unit]
+Description=ADAM Autonomous Desktop AI Module Daemon
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/ADAM/software/pi
+EnvironmentFile=/home/pi/ADAM/.env
+ExecStart=/home/pi/ADAM/software/pi/venv/bin/python src/main.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Real-time process scheduling priorities for audio DSP
+Nice=-10
+
+[Install]
+WantedBy=multi-user.target

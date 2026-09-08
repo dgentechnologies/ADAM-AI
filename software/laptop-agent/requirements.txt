@@ -1,0 +1,9 @@
+Flask>=3.0.0
+zeroconf>=0.131.0
+requests>=2.31.0
+python-dotenv>=1.0.1
+
+# System-level controls (Windows)
+pycaw>=20240210; platform_system == "Windows"
+comtypes>=1.4.0; platform_system == "Windows"
+screen-brightness-control>=0.23.0; platform_system == "Windows" or platform_system == "Linux"
